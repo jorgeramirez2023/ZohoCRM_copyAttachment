@@ -1,0 +1,140 @@
+void pushPDF(string scID, string CRM_Lead_ID, string CRM_Deal_ID)
+{
+////////////////////////////////////////////////
+// Get PDF files id from current Storage Contract
+////////////////////////////////////////////////				
+accountID = "";
+contactID = "";
+dealID = "";
+if(CRM_Deal_ID != null && CRM_Deal_ID != "")
+{
+	dealRec = zoho.crm.getRecordById("Deals",CRM_Deal_ID,Map(),"crm_conn");
+	if(dealRec.get("Account_Name") != null)
+	{
+		accountID = dealRec.get("Account_Name").get("id");
+	}
+	contactID = dealRec.get("Contact_Name").get("id");
+	dealID = CRM_Deal_ID;
+}
+else
+{
+	leadJSON = invokeurl
+	[
+		url :"https://www.zohoapis.com/crm/v6/Leads/" + CRM_Lead_ID + "?converted=both"
+		type :GET
+		connection:"crm_conn"
+	];
+	info leadJSON;
+	leadRec = leadJSON.get("data").toJSONList().get(0).toMap();
+	if(leadRec.get("Converted__s") == true)
+	{
+		if(leadRec.get("Converted_Account") != null)
+		{
+			accountID = leadRec.get("Converted_Account").get("id");
+		}
+		contactID = leadRec.get("Converted_Contact").get("id");
+		dealID = leadRec.get("Converted_Deal").get("id");
+	}
+}
+info "accountID: " + accountID;
+info "contactID: " + contactID;
+info "dealID: " + dealID;
+/////////////////////////////////////////////////////////////////////////
+// Get Contract PDF file ID from current Storage Contract record
+/////////////////////////////////////////////////////////////////////////				
+listaJSON = invokeurl
+[
+	url :"https://www.zohoapis.com/crm/v6/Storage_Contracts/" + scID + "/Attachments?fields=id,File_Name,Created_Time,Parent_Id"
+	type :GET
+	connection:"crm_conn"
+];
+fileList = listaJSON.get("data").toJSONList();
+info "fileList: " + fileList;
+for each  fileRec in fileList
+{
+	if(fileRec.get("File_Name").contains(".pdf"))
+	{
+		fileID = fileRec.get("id");
+		break;
+	}
+}
+info "fileID: " + fileID;
+////////////////////////////////////////////////
+// Convert PDF to File variable
+////////////////////////////////////////////////			
+pdfFile = invokeurl
+[
+	url :"https://www.zohoapis.com/crm/v6/Storage_Contracts/" + scID + "/Attachments/" + fileID
+	type :GET
+	connection:"crm_conn"
+];
+info "pdfFile: " + pdfFile;
+pdfFile.setParamName("file");
+////////////////////////////////////////////////
+// Upload PDF file to Deal, Account and Contacts
+////////////////////////////////////////////////		
+// Deal
+updDeal = invokeurl
+[
+	url :"https://www.zohoapis.com/crm/v6/Deals/" + dealID + "/Attachments"
+	type :POST
+	files:pdfFile
+	connection:"crm_conn"
+];
+//"Deal Update: {"data":[{"code":"SUCCESS","details":{"Modified_Time":"2024-07-10T13:51:27-04:00","Modified_By":{"name":"Lindsay Reiter","id":"5539578000000393001"},"Created_Time":"2024-07-10T13:51:27-04:00","id":"5539578000008188001","Created_By":{"name":"Lindsay Reiter","id":"5539578000000393001"}},"message":"attachment uploaded successfully","status":"success"}]}"
+if(updDeal.get("data") == null)
+{
+	info "ERROR while updating Deal record*: " + updDeal;
+}
+if(updDeal.get("data").toJSONList().size() == 0)
+{
+	info "ERROR while updating Deal record**: " + updDeal;
+}
+if(updDeal.get("data").toJSONList().get(0).toMap().get("code") != "SUCCESS")
+{
+	info "ERROR while updating Deal record***: " + updDeal;
+}
+// Contact
+updContact = invokeurl
+[
+	url :"https://www.zohoapis.com/crm/v6/Contacts/" + contactID + "/Attachments"
+	type :POST
+	files:pdfFile
+	connection:"crm_conn"
+];
+if(updContact.get("data") == null)
+{
+	info "ERROR while updating Contact record*: " + updContact;
+}
+if(updContact.get("data").toJSONList().size() == 0)
+{
+	info "ERROR while updating Contact record**: " + updContact;
+}
+if(updContact.get("data").toJSONList().get(0).toMap().get("code") != "SUCCESS")
+{
+	info "ERROR while updating Contact record***: " + updContact;
+}
+// Account
+if(accountID != null && accountID != "")
+{
+	updAccount = invokeurl
+	[
+		url :"https://www.zohoapis.com/crm/v6/Accounts/" + accountID + "/Attachments"
+		type :POST
+		files:pdfFile
+		connection:"crm_conn"
+	];
+	if(updAccount.get("data") == null)
+	{
+		info "ERROR while updating Account record*: " + updAccount;
+	}
+	if(updAccount.get("data").toJSONList().size() == 0)
+	{
+		info "ERROR while updating Account record**: " + updAccount;
+	}
+	if(updAccount.get("data").toJSONList().get(0).toMap().get("code") != "SUCCESS")
+	{
+		info "ERROR while updating Account record***: " + updAccount;
+	}
+}
+}
